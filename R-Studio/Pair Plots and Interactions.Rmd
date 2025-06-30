@@ -1,0 +1,174 @@
+---
+title: "Pair Plots and Interactions"
+author: "Angelina Legostaeva"
+date: "2025-04-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Data:
+```{r}
+rust <- read.table("rust.txt", header = T)
+```
+
+Create a data frame 
+Draw a pairs plot of the numeric variables
+
+```{r}
+DeathRate <- rust$Deaths / rust$Population * 100000
+Density <- rust$Population / rust$Area
+PctWhite <- rust$PctWhite
+logIncome <- log(rust$Income)
+Swing <- rust$Trump - (1 - rust$Obama)
+County <- rust$County
+
+rust2 <- data.frame(DeathRate, Density, PctWhite, logIncome, Swing, County)
+rust2
+```
+
+
+```{r}
+pairs(DeathRate ~ Density + PctWhite + logIncome + Swing, data = rust2, pch = 16)
+```
+
+no interaction = 22.72 + 150.9 * Swing + 0.005408 * Density + error
+```{r}
+no_int <- lm(DeathRate ~ Swing + Density, data = rust2)
+no_int
+```
+
+DeathRate = (22.57 + 0.007068) * Density + (136.1 + 0.0534) * Density + error
+
+DeathRate = 22.577 * Density + 136.1534 * Density + error
+```{r}
+q1model <- lm(DeathRate ~ Swing + Density + Swing:Density, data = rust2)
+q1model
+```
+AIC:
+```{r}
+AIC(no_int)
+AIC(q1model)
+```
+Model with interaction has lower AIC, so it is better.
+
+
+(a) Density = 55 (similar to Randolph County, the lowest density county in Indiana)
+
+DeathRate = 22.577 * 55 + 136.1534 * 55 + error
+
+
+(b) Density = 369 (similar to Monroe County, IN)
+
+DeathRate = 22.577 * 369 + 136.1534 * 369 + error
+
+
+(c) Density = 2375 (similar to Marion County, IN, i.e. Indianapolis)
+
+DeathRate = 22.577 * 2375 + 136.1534 * 2375 + error
+
+
+For all ages:
+```{r}
+# Work out equations for Randolph, Monroe, and Marion Counties:
+
+intercepts <- coef(q1model)[1] + coef(q1model)[3] * c(55, 369, 2375)
+
+slopes <- coef(q1model)[2] + coef(q1model)[4] * c(55, 369, 2375)
+
+intercepts
+
+
+slopes
+```
+
+
+Plot:
+```{r}
+plot(rust2$Swing, rust2$DeathRate, main = "Blue: age 55; orange: age 369; green: age 2375" )
+
+abline(22.96331, 139.0838, col = "blue")
+abline(25.18274, 155.8740, col = "orange")
+abline(39.36167, 263.1392, col = "green")
+```
+
+
+####################################################################################
+
+The distribution does not look symmetric (not normally distributed), 
+because it is curved and has some skewdness to the right.
+
+This suggest about possible improvements to the model. For example, 
+we can change some of the predictors and(or) delete some outlier points.
+Another solution for right-skewdness is to make a transformation
+to the data. For example, logarithms or sqrt for right skewdness.
+
+```{r}
+residuals <- residuals(q1model)
+
+qqnorm(residuals, main = "Q-Q Plot for Residuals for q1model")
+qqline(residuals, col = "blue")
+
+hist(residuals, main = "Histogram for Residuals of q1model", 
+     xlim = c(-40, 100), ylim = c(0, 80))
+```
+
+####################################################################################
+
+
+(a) Forward selection starting from an empty model:
+AIC: 1373.103
+
+```{r}
+full <- lm(DeathRate ~ Density + PctWhite + logIncome + Swing, data = rust)
+
+empty <- lm(DeathRate ~ 1, data = rust)
+empty
+
+forw.empty <- step(empty, scope = formula(full), direction = "forward")
+summary(forw.empty)
+
+AIC(forw.empty)
+```
+(b) Backward selection starting from a full model with all predictors:
+
+
+AIC: 1373.103
+
+```{r}
+full <- lm(DeathRate ~ Density + PctWhite + logIncome + Swing, data = rust)
+full
+
+back.full <- step(full, direction = "backward")
+back.full
+AIC(back.full)
+```
+
+
+(c) Both-ways stepwise selection starting from an empty model:
+
+AIC: 1373.103
+
+```{r}
+both.empty <- step(empty, scope = formula(full), direction = "both")
+both.empty
+AIC(both.empty)
+```
+
+
+
+(d) Both-ways stepwise selection starting from a full model:
+
+AIC: 1373.103
+
+```{r}
+both.full <- step(full, direction = "both")
+both.full
+AIC(both.full)
+```
+All these methods result in the same model: 22.72 + 0.005408 * Density + 150.9 * Swing + error
+
+All these models share the same AIC as well: 1373.103
+ 

@@ -1,0 +1,240 @@
+---
+title: "Problem Set 11"
+author: "Angelina Legostaeva"
+date: "2025-04-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+#######################################################################################
+
+1. Logistic Regression
+2. glm, family = binomial
+3. Divide-by-4 rule
+4. logit(p) and prob. scale
+5. model’s probabilities for each of the four largest - type = "response"
+
+6. data.frame
+7. plot
+
+8. Poisson Regression
+9. setting terms
+10. 1 - sum(dpois(0:9, 10.15112)) #probability
+
+#######################################################################################
+
+
+
+1 Logistic Regression
+
+1. Data:
+```{r}
+elec <- read.table("elec16.txt", header = T)
+elec$vote <- (elec$vote == "Clinton")
+#Clinton
+```
+
+
+2. (a) regression equation = 0.04410 + 0.03042 * education
+```{r}
+vote_lr <- glm(vote ~ education, family = binomial, data = elec)
+summary(vote_lr)
+```
+#######################################################################################
+
+(b) According to the divide-by-4 rule, the model probability of voting for Clinton
+increases by 0.76%
+```{r}
+db4 <- 0.03042/4
+db4
+```
+
+#######################################################################################
+
+(c) Find the model’s probabilities for voting for Clinton for each of the six levels of education
+the long way (i.e., first get the value of logit(p) and then use the inverse of logit to get
+the probability).
+
+```{r}
+logit.p <- 0.04410 + 0.03042 * (1:6)
+logit.p
+
+# Probability scale
+exp(logit.p) / (1 + exp(logit.p))
+```
+
+
+#######################################################################################
+
+
+3. Now, we want to fit a logistic regression to predict the probability of vote using race as a
+categorical x-variable.
+
+(a) 
+Largest group is White (7704), then Black (962), then Hispanic (635), and Asian(272).
+Smallest is Middle Eastern which is only 16, so not really reliable. 
+However, other samples have good sizes.
+```{r}
+table(elec$race)
+```
+
+
+(b) Fit the logistic regression and show the coefficients.
+```{r}
+race_lr <- glm(vote ~ race, family = binomial, data = elec)
+summary(race_lr)
+```
+
+(c) The baseline group is Asian. 
+The highest probability of voting for Clinton is Black.
+The lowest probability is Other.
+
+#######################################################################################
+
+
+(d) Find the model’s probabilities for voting for Clinton for each of the four largest groups
+(in terms of the sample size), using the predict() function.
+```{r}
+predict(race_lr, 
+        newdata = data.frame(race = c("White", "Black", "Hispanic", "Asian")), 
+        type = "response")
+```
+
+
+4. Fit a logistic regression to predict the probability of vote using race and education (separately or with no interaction) as x-variables.
+```{r}
+vote_race <- glm(vote ~ race + education, family = binomial, data = elec)
+summary(vote_race)
+```
+
+#######################################################################################################################
+
+(a) 
+White:
+```{r}
+white <- predict(vote_race, newdata = data.frame(race = "White", education = 1:6), type = "response")
+white
+```
+Black:
+```{r}
+black <- predict(vote_race, newdata = data.frame(race = "Black", education = 1:6), type = "response")
+black
+```
+Hispanic:
+```{r}
+hisp <- predict(vote_race, newdata = data.frame(race = "Hispanic", education = 1:6), type = "response")
+hisp
+```
+
+(b) Draw a graph of the results (my recommendation would be to do a line for White, a line
+for Black, and a line for Hispanic on the same axes, with education on the x-axis.)
+
+```{r}
+plot(1:6, white, type = "l",
+     xlab = "Education", ylab = "Probability",
+     main = "White = blue; Black = red; Hispanic = green",
+     ylim = c(0, 1), col = "blue")
+
+lines(1:6, black, col = "red")
+lines(1:6, hisp, col = "green")
+```
+#######################################################################################################################
+
+5. Fit a logistic regression to predict the probability of vote using race, education, and their
+interaction as x-variables.
+```{r}
+race_ed <- glm(vote ~ race * education, family = binomial, data = elec)
+#summary(race_ed)
+```
+
+(a) Find the model probability of voting for Clinton for each combination of race being
+White, Black, or Hispanic with each education level from 1 to 6 (for a total of 18
+predictions.) Draw a graph of the results.
+```{r}
+white_2 <- predict(race_ed, newdata = data.frame(race = "White", education = 1:6), type = "response")
+black_2 <- predict(race_ed, newdata = data.frame(race = "Black", education = 1:6), type = "response")
+hisp_2 <- predict(race_ed, newdata = data.frame(race = "Hispanic", education = 1:6), type = "response")
+white_2
+black_2
+hisp_2
+```
+```{r}
+plot(1:6, white_2, type = "l",
+     xlab = "Education", ylab = "Probability",
+     main = "White = blue; Black = red; Hispanic = green",
+     ylim = c(0, 1), col = "blue")
+
+lines(1:6, black_2, col = "red")
+lines(1:6, hisp_2, col = "green")
+```
+
+
+(b) This graph's green line(Hispanic) is pointed downwards.
+
+
+
+6. vote_race model has the lower BIC (12813.53)
+
+```{r}
+BIC(vote_race, race_ed)
+```
+
+
+
+7. Add religious.importance to the model with lower BIC from question 6 and fit one more
+logistic regression.
+
+(a) Yes, this logistic model have an even lower BIC?
+```{r}
+relig <- glm(vote ~ race + education + religious.importance, family = binomial, data = elec)
+BIC(relig)
+```
+
+
+(b) Show the regression coefficients. Give a clear interpretation of what the coefficient for
+religious.importance means.
+
+For each one unit increase in religious.importance, voting decrease by 48%
+```{r}
+summary(relig)
+```
+```{r}
+exp(-0.6543) - 1
+```
+
+#######################################################################################################################
+#######################################################################################################################
+
+2 Poisson Regression:
+
+1. Fit a Poisson regression that models the log of expected absences as an additive function
+of the race, gender, school, and learner variables (with no interactions), and give the
+coefficients of the regression model.
+
+```{r}
+school <- read.table("schooldays.txt", header = T)
+
+poisson <- glm(absent ~ race + sex + school + learner, family = poisson, data = school)
+summary(poisson)
+```
+Poisson regression = 2.80601 -0.48843 * racenon-aboriginal + 0.15616 * sexmale -0.14596 * schoolF1 + 
+0.30205 * schoolF2 + 0.20088 * schoolF3 + 0.04870 * learnerslow
+
+2. Find the expected days absent (according to the model) for a non-aboriginal female child who
+is an average learner at an F0 school.
+```{r}
+predict(poisson, newdata = data.frame(race = "non-aboriginal", sex = "female", school = "F0", learner = "average"), 
+        type = "response")
+```
+3. Assuming the Poisson model is correct, what is the probability a non-aboriginal female child
+who is an average learner at an F0 school is absent for at least ten days?
+
+```{r}
+1 - sum(dpois(0:9, 10.15112))
+```
+

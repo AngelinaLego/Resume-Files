@@ -1,0 +1,256 @@
+---
+title: "G-test, LL ratio, plkchi()"
+author: "Angelina Legostaeva"
+date: "2025-03-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+####################################################################################
+
+1. G-test
+2. Likelihood ratio test
+
+3. profile likelihood confidence interval for λ
+poi <- function(lambda){}
+
+control.list 
+plkhci(control.list, poi, "lambda", prob = 0.98)
+
+4. wlad ci plkhci
+
+5. AIC not the easy way
+
+####################################################################################
+1.
+
+
+```{r}
+observed <- c(29, 19, 18, 25, 17, 10, 15, 11)
+n <- sum(observed)
+expected <- rep(n/8, 8)
+
+G <- 2 * sum(observed * log(observed / expected))
+1 - pchisq(G, df = 8 - 1)
+```
+Conclusion: P-value is 0.02, which is smaller than 0.05.
+I am rejecting the null hypothesis that a horse’s starting position does not affect its chance of winning.
+So, for the alternative hypothesis: a horse’s starting position affect its chance of winning.
+
+2. 
+Observed:
+• Tall cut-leaf: 926
+• Tall potato-leaf: 288
+• Dwarf cut-leaf: 293
+• Dwarf potato-leaf: 104
+
+
+```{r}
+observed <- c(926, 288, 293, 104)
+n <- sum(observed)
+expected <- n * c(9/16, 3/16, 3/16, 1/16)
+
+G <- 2 * sum(observed * log(observed / expected))
+1 - pchisq(G, df = 4 - 1)
+```
+Conclusion: p-value is 0.7, which larger than 0.05.
+So, I am failing to reject the null hypothesis that the observations are consistent with the expected proportions.
+
+####################################################################################
+
+3. The file laliga.txt contains the number of goals scored in each of the 380 games of the
+2021–22 Spanish La Liga soccer season (between 0 and 8.) We wish to model this data using
+a Poisson distribution with parameter λ.
+
+Data: 
+```{r}
+laliga <- scan("laliga.txt")
+summary(laliga)
+```
+
+
+(a) The numerical value of the MLE for λ is 2.502632.
+```{r}
+lambda <- mean(laliga)
+lambda
+```
+
+(b) The variance of ˆλ = λ / n
+The variance of ˆλ is 0.006585873
+```{r}
+n <- length(laliga)
+
+var <- lambda / n
+var
+```
+
+(c) H0:lambda = 2.5
+Perform a likelihood ratio test of this hypothesis, giving a test statistic, P-value, and conclusion.
+```{r}
+W <- (lambda - 2.5)^2 / var
+W
+p_value3 <- 1 - pchisq(W, df = 1)
+p_value3
+```
+####################################################################################
+
+Option 1: Likelihood ratio test.
+```{r}
+# Unrestricted loglik
+loglik.max <- sum(log(dpois(laliga, mean(laliga))))
+
+# Restricted loglik
+loglik.null <- sum(log(dpois(laliga, 2.5)))
+
+# LR stat
+G <- 2 * (loglik.max - loglik.null)
+
+# P-value
+1 - pchisq(G, df = 1)
+```
+
+Conclusion: The P-value is about 0.97, which is greater than 0.05. 
+This may be an underestimate, so there's no current evidence of a difference.
+I an failing to reject the null hypothesis that lambda = 2.5.
+####################################################################################
+
+
+(d) 
+98% profile likelihood confidence interval for λ: 2.318556 to 2.696201
+```{r}
+poi <- function(lambda){
+  loglik <- sum(dpois(laliga, lambda, log = TRUE))
+  return(-loglik)
+}
+
+control.list = list(label = "lambda", est = lambda, low = 0, upp = 10)
+library(Bhat)
+plkhci(control.list, poi, "lambda", prob = 0.98)
+```
+
+98% t-confidence interval for λ: 2.296151 to 2.709112
+```{r}
+t.test(laliga,mu=2.5,conf.level=0.98)
+```
+
+Conclusion:yes, the results are really similar. 
+For 98% profile likelihood confidence interval, λ is from 2.3 to 2.7.
+For 98% t-confidence interval, λ is from 2.31 to 2.7. 
+
+####################################################################################
+
+```{r}
+# Wald
+x.bar <- mean(laliga)
+se <- sqrt(x.bar / 380)
+wald.ci <- x.bar + qnorm(c(.01, .99)) * se
+# (2.313841, 2.691423)
+# Profile
+laliga.nll <- function(lambda){
+lik <- dpois(laliga, lambda)
+return(-sum(log(lik)))
+}
+library(Bhat)
+control.list <- list(label = "lambda", est = x.bar, low = 0, upp = 99)
+profile.ci <- plkhci(control.list, laliga.nll, "lambda", prob = 0.98)
+# (2.318555, 2.696199
+```
+####################################################################################
+
+
+4. 
+Data:
+```{r}
+hurricanes <- read.csv("hurricanes(2).csv")
+summary(hurricanes$alldeaths)
+alld <- hurricanes$alldeaths
+```
+Poisson: 4358.845
+```{r}
+lambda.hat <- mean(alld)
+
+pois.ll <- sum(log(dpois(alld, lambda.hat)))
+poi_aic <- -2 * pois.ll + 2 * 1
+poi_aic
+```
+
+Negative Binomial: 708.6559
+```{r}
+nbinom.nll <- function(params, data){
+  size <- params[1]
+  prob <- params[2]
+  lik <- dnbinom(data, size, prob)
+  loglik <- log(lik)
+  nll <- -sum(log(lik))
+  return(nll)
+}
+
+x.bar <- mean(alld)
+sigma2.hat <- mean(alld^2) - x.bar^2
+
+p.mom <- x.bar / sigma2.hat
+r.mom <- p.mom / (1 - p.mom) * x.bar
+
+nb.mle <- optim(par = c(r.mom, p.mom), fn = nbinom.nll, data = alld, hessian = TRUE)
+nb.mle
+
+nb_aic <- 2 * nb.mle$value + 2 * 2
+nb_aic
+```
+
+Zero-Inflated Poisson:3986.837
+
+```{r}
+pois0.nll <- function(pars, data){
+  p <- pars[1]
+  lambda <- pars[2]
+  pois.lik <- dpois(data, lambda)
+  real.lik <- rep(NA, length(data))
+  which0 <- (data == 0)
+  real.lik[which0 == FALSE] <- (1 - p) * pois.lik[which0 == FALSE]
+  real.lik[which0 == TRUE] <- p + (1 - p) * pois.lik[which0 == TRUE]
+  loglik <- log(real.lik)
+  return(-sum(loglik))
+}
+
+p.init <- mean(alld == 0)
+lambda.init <- mean(alld)
+c(p.init, lambda.init)
+
+poi0.mle <- optim(par = c(0.109, 20.652), fn = pois0.nll, data = alld, hessian = TRUE)
+poi0.mle
+
+pois0.aic <- 2 * poi0.mle$value + 2 * 2
+pois0.aic
+```
+
+
+Zero-Inflated Negative Binomial: 697.3579
+
+```{r}
+nll.b <- function(pars){
+  p <- pars[1]
+  lambda <- pars[2]
+  prob <- pars[3]
+  pois.lik <- dnbinom(alld, lambda, prob) 
+  real.lik <- rep(NA, length(alld))
+  which0 <- (alld == 0) 
+  real.lik[which0 == FALSE] <- (1 - p) * pois.lik[which0 == FALSE] 
+  real.lik[which0 == TRUE] <- p + (1 - p) * pois.lik[which0 == TRUE]
+  loglik <- log(real.lik)
+  return(-sum(loglik))
+}
+
+nll.b.mle <- optim(par = c(0.5, 1, 0.5), fn = nll.b, hessian = TRUE)
+nll.b.mle
+
+nb0.aic <- 2 * nll.b.mle$value + 2 * 3
+nb0.aic
+```
+
+I will choose Negative Binomial (708.6559), because it has the smallest AIC.
+Not the Zero-Inflated Negative Binomial (697.3579), because it is an impossible model due to negative $par value (-1.39666082).

@@ -1,0 +1,423 @@
+---
+title: "Functions"
+author: "Angelina Legostaeva"
+date: "2025-04-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+roots <- scan("roots.txt")
+```
+
+Negative binomial:
+```{r}
+nbinom.nll <- function(params, data){
+  size <- params[1]
+  prob <- params[2]
+  lik <- dnbinom(data, size, prob)
+  loglik <- log(lik)
+  nll <- -sum(loglik)
+  return(nll)
+}
+```
+```{r}
+nbinom.nll(c(1, 0.5), data = roots)
+```
+
+Now use optim():
+```{r}
+roots.nb.mle <- optim(par = c(r.mom, p.mom), fn = nbinom.nll, data = roots)
+roots.nb.mle
+```
+
+AIC NB:
+```{r}
+nb.aic <- 2 * roots.nb.mle$value + 2 * 2
+nb.aic
+```
+
+##############################################################################
+Poisson:
+
+98% profile likelihood confidence interval for λ: 2.318556 to 2.696201
+```{r}
+poi <- function(lambda){
+  loglik <- sum(dpois(laliga, lambda, log = TRUE))
+  return(-loglik)
+}
+
+control.list = list(label = "lambda", est = lambda, low = 0, upp = 10)
+library(Bhat)
+plkhci(control.list, poi, "lambda", prob = 0.98)
+```
+
+```{r}
+lambda.hat <- mean(roots)
+lambda.hat
+var(roots)
+p <- dpois(0:9, lambda.hat)
+round(40 * p, 2)
+```
+
+Find the AIC:
+```{r}
+pois.ll <- sum(log(dpois(roots, lambda.hat)))
+-2 * pois.ll + 2 * 1
+```
+
+
+Wald Ci;
+```{r}
+lambda.hat <- mean(counts)
+n <- length(counts)
+
+# Standard error
+se.lambda <- sqrt(lambda.hat / n)
+
+# Wald 95% CI
+ci.lambda <- lambda.hat + qnorm(0.975) * se.lambda
+
+ci.lambda
+```
+
+#############################################################################
+
+Zero-inflated Poisson NLL function:
+```{r}
+pois0.nll <- function(pars, data){
+  p <- pars[1]
+  lambda <- pars[2]
+  pois.lik <- dpois(data, lambda)
+  real.lik <- rep(NA, length(data))
+  which0 <- (data == 0)
+  real.lik[which0 == FALSE] <- (1 - p) * pois.lik[which0 == FALSE]
+  real.lik[which0 == TRUE] <- p + (1 - p) * pois.lik[which0 == TRUE]
+  loglik <- log(real.lik)
+  return(-sum(loglik))
+}
+```
+
+```{r}
+roots.zip.mle <- optim(par = c(19/40, 2.45), fn = pois0.nll, data = roots)
+roots.zip.mle
+```
+
+
+Get MOMs:
+```{r}
+x.bar <- mean(roots)
+sigma2.hat <- mean(roots^2) - x.bar^2
+p.mom <- x.bar / sigma2.hat
+r.mom <- p.mom / (1 - p.mom) * x.bar
+c(r.mom, p.mom)
+```
+
+Now use optim():
+```{r}
+roots.nb.mle <- optim(par = c(r.mom, p.mom), fn = nbinom.nll, data = roots)
+roots.nb.mle
+```
+
+```{r}
+roots.zip.mle <- optim(par = c(19/40, 2.45), fn = pois0.nll, data = roots)
+roots.zip.mle
+```
+
+or
+```{r}
+art.zip <- optim(par = c(mean(biochemists$art == 0), mean(biochemists$art)), fn = pois0.nll, data = biochemists$art)
+art.zip$par
+```
+
+
+
+AIC Zero-inflated:
+```{r}
+2 * roots.zip.mle$value + 2 * 2
+```
+
+#############################################################################
+
+
+Gamma:
+```{r}
+mean.wwe <- mean(wwe)
+lambda.init <- 1 / mean.wwe
+k.init <- 1
+```
+
+```{r}
+x.bar <- mean(WWE)
+sigma2.hat <- mean(WWE^2) - x.bar^2
+# Fit a gamma
+gamma.nll <- function(pars, data){
+  k <- pars[1]
+  lambda <- pars[2]
+  lik <- dgamma(data, k, lambda)
+  return(-sum(log(lik)))
+}
+
+k.mom <- x.bar^2 / sigma2.hat
+lambda.mom <- x.bar / sigma2.hat
+gamma.mle <- optim(par = c(k.mom, lambda.mom), fn = gamma.nll, data = WWE, hessian = TRUE)
+```
+
+Wald test for H0 : k = 1
+```{r}
+nerve.var <- solve(nerve.mle$hessian)
+w <- (nerve.mle$par[1] - 1)^2 / nerve.var[1, 1]
+w
+
+#p-value
+1 - pchisq(w, df = 1)
+```
+
+or
+
+```{r}
+mle <- nerve.mle$par
+vcov.mat <- solve(nerve.mle$hessian)
+se <- sqrt(diag(vcov.mat))
+
+
+ci.k <- mle[1] + qnorm(0.975) * se[1]
+ci.lambda <- mle[2] + qnorm(0.975) * se[2]
+```
+
+
+Gamma AIC:
+```{r}
+2 * gamma.mle$value + 2 * 2
+```
+
+##################################################################################
+
+```{r}
+binom.nloglik <- function(p){
+  lik <- dbinom(10, 100, p)
+  return(-log(lik))
+}
+
+library(Bhat)
+control.list <- list(label = "p", est = 0.1, low = 0, upp = 1)
+plkhci(control.list, binom.nloglik, "p")
+```
+
+
+AIC Binom or Bern.:
+```{r}
+x <- 80  # number of successes
+n <- 100  # number of trials
+p.hat <- x / n  # Estimated probability p
+
+loglik_binom <- dbinom(x, n, p.hat, log = TRUE)
+
+k <- 1  # Binomial has one parameter (p)
+AIC_binom <- 2 * k - 2 * loglik_binom
+AIC_binom
+```
+
+
+#########################################################################################################################################
+
+Geometric data/distribution, 95% CI for p 
+
+use plkhci():
+```{r}
+geom.nloglik2 <- function(p){
+  nloglik1 <- -3 * log(1 - p) - log(p)
+  nloglik2 <- -2 * log(1 - p) - log(p)
+  nloglik <- nloglik1 + nloglik2
+  return(nloglik)
+}
+
+library(Bhat)
+control.list <- list(label = "p", est = 2/7, low = 0, upp = 1)
+plkhci(control.list, geom.nloglik2, "p")
+```
+
+#########################################################################################################################################
+
+Binomial:
+```{r}
+binom.nll <- function(p){
+  lik <- dbinom(binomdata, size = 100, prob = p) # a vector
+  loglik <- log(lik) # a vector
+  nloglik <- -sum(loglik) # a number
+  return(nloglik)
+}
+
+# Check the function works:
+binom.nll(0.7)
+```
+
+```{r}
+p.hat <- 12614 / 38663  # example for digit 1
+n <- 38663
+se <- sqrt(p.hat * (1 - p.hat) / n)
+
+ci.p <- p.hat + qnorm(0.975)* se
+```
+
+############################################################################
+
+Observe x = 5. What's the likelihood?
+
+```{r}
+mu <- seq(0, 10, 0.001)
+lik <- dnorm(5, mean = mu, sd = 1)
+plot(mu, lik, type = "l")
+```
+
+Write an NLL function:
+
+```{r}
+normal.nll <- function(mu){
+  lik <- dnorm(5, mu, 1)
+  nll <- -log(lik)
+  return(nll)
+}
+```
+```{r}
+optimize(normal.nll, c(-10, 10))
+```
+
+##############################################################################
+
+Exponential distribution CDF and PDF:
+```{r}
+curve(pexp(x, rate = 1), from = 0, to = 10)
+curve(dexp(x, rate = 0.4), from = 0, to = 10)
+```
+
+
+MLE for the rate parameter is 1/sample mean.
+```{r}
+mean(snoq)
+lambda.mle <- 1 / mean(snoq)
+lambda.mle
+```
+
+
+Exponential AIC:
+```{r}
+-2*sum(log(dexp(WWE, 1/mean(WWE)))) + 2*1
+```
+
+
+Wald CI:
+```{r}
+lambda.mle <- 1 / mean(wwe)
+
+n <- length(wwe)
+se.lambda <- lambda.mle / sqrt(n)
+
+ci.lambda <- lambda.mle + qnorm(0.975) * se.lambda
+```
+
+##############################################################################
+
+Uniform Model
+
+
+Write a function to find the MLE of the maximum of a Uniform distribution from simulated data:
+
+```{r}
+uniMLE <- function(n, b){
+  data <- runif(n, min = 0, max = b)
+  b.mle <- max(data)
+  return(b.mle)
+}
+```
+```{r}
+uniMLE(n = 5, b = 100)
+uniMLE(n = 100, b = 100)
+```
+
+
+##############################################################################
+
+Normal distribution: estimators for the variance 
+
+Do a simulation to compare the biases of the MLE for variance and the sample variance:
+```{r}
+norm.sim <- function(n){
+  data <- rnorm(n) # True parameter value: variance = 1
+  sigma2 <- mean((data - mean(data))^2) # MLE
+  s2 <- var(data) # Sample variance
+  return(c(sigma2, s2))
+}
+```
+
+
+##############################################################################
+
+Uniform distribution: MLE for the upper bound b
+
+Write a function to find the MLE of the upper bound of a Uniform distribution from simulated data:
+
+```{r}
+uniMLE <- function(n, b){
+  data <- runif(n, min = 0, max = b) # simulate data from U(0,b)
+  b.mle <- max(data) # compute MLE of b from simulated data
+  return(b.mle)
+}
+
+uniMLE(n = 20, b = 10)
+uniMLE(n = 50, b = 10)
+uniMLE(n = 50, b = 80)
+```
+
+##############################################################################
+G-statistic:
+```{r}
+lambda.hat <- mean(TotalGoals)
+lambda.hat
+
+p <- dpois(0:6, lambda.hat)
+
+exp <- n * p
+expected <- c(exp, n - sum(exp))
+
+observed <- c(22, 55, 99, 84, 65, 32, 16, 7)
+  
+G <- 2 * sum(observed * log(observed / expected))
+G
+
+p_value <- 1 - pchisq(G, 6)
+p_value
+```
+
+```{r}
+obs <- c(12614, 6443, 4563, 3581, 2951, 2533, 2227, 1988, 1763) * 1000
+total <- sum(obs)
+f <- c(0.3010, 0.1761, 0.1249, 0.0969, 0.0792, 0.0669, 0.0580, 0.0512, 0.0458)
+expected <- total * f
+
+loglik_multinomial <- sum(obs * log(obs / expected))
+
+k <- length(f)  # Number of categories (9 for Benford)
+AIC_multinomial <- 2 * k - 2 * loglik_multinomial
+AIC_multinomial
+```
+
+
+##############################################################################
+
+BICs for our probability models:
+
+```{r}
+# Poisson
+-2 * sum(log(dpois(roots, mean(roots)))) + 1 * log(40)
+# Negative binomial
+2 * 81 + 2 * log(40)
+# Zero inflated Poisson
+2 * roots.zip.mle$value + 2 * log(40)
+```
+
+
+##############################################################################

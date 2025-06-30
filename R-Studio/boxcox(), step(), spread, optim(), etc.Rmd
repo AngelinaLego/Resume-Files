@@ -1,0 +1,208 @@
+---
+title: "Problem Set 10"
+author: "Angelina Legostaeva"
+date: "2025-04-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#######################################################################################################################
+
+
+1. boxcox()
+2. its lambda
+3. step() both
+4. AIC log of different funct.
+5. Quality as categorical
+6. coef(exp)
+
+7. get rid of the tie
+8. Create Boolean (a binary variable:TRUE and FALSE)
+9. optim()
+
+10. Plot
+11. spread
+12. probability and eta
+
+
+
+#######################################################################################################################
+
+
+1. The file housetrain.txt contains measurements on 372 recent house sales in one city. The
+variables are:
+
+Data:
+```{r}
+housetrain <- read.table("housetrain.txt", header = T)
+```
+
+(a) The optimal value of λ is -0.27.
+
+```{r}
+library(MASS)
+house.bc <- boxcox(Price ~ . -ID, data = housetrain, lambda = seq(-2, 2, 0.01))
+
+which.max(house.bc$y) ## which lambda in the sequence max the likelihood
+round(house.bc$x[which.max(house.bc$y)], 2) # # what is that lambda value
+```
+#######################################################################################################################
+
+(b) 
+```{r}
+Model_1 <- step(lm(log(Price) ~ . - ID, data = housetrain), direction = "both")
+Model_1
+AIC(Model_1) 
+```
+Model 1 retains Sqft, Bathroom, Garage, YearBuild, Quality, and Lot as predictors.
+
+#######################################################################################################################
+
+(c) Taking the log of Lot reduces the AIC.
+
+
+Call this model with one or more logged predictors Model 2.
+```{r}
+summary(housetrain)
+```
+
+```{r}
+AIC(lm(log(Price) ~ Sqft + Bathroom + Garage + YearBuild + Quality + Lot, data = housetrain))
+
+## [1] -182.1762
+
+AIC(lm(log(Price) ~ log(Sqft) + Bathroom + Garage + YearBuild + Quality + Lot, data = housetrain))
+
+## [1] -195.4095
+
+AIC(lm(log(Price) ~ Sqft + Bathroom + Garage + log(YearBuild) + Quality + Lot, data = housetrain))
+
+## [1] -181.9565
+
+AIC(lm(log(Price) ~ Sqft + Bathroom + Garage + YearBuild + Quality + log(Lot), data = housetrain))
+
+## [1] -177.7795
+```
+
+```{r}
+# It's unnecessary to do the following after comparing the above four models. But in case you're curious or unsure about this ...
+
+AIC(lm(log(Price) ~ log(Sqft) + Bathroom + Garage + log(YearBuild) + Quality + Lot, data = housetrain))
+```
+```{r}
+AIC(lm(log(Price) ~ log(Sqft) + Bathroom + Garage + YearBuild + Quality + log(Lot), data = housetrain))
+
+## [1] -190.4167
+
+AIC(lm(log(Price) ~ log(Sqft) + Bathroom + Garage + log(YearBuild) + Quality + log(Lot), data = housetrain))
+
+## [1] -190.1943
+```
+#######################################################################################################################
+
+(d) It may be better to treat Quality as a categorical variable rather than a numerical one.
+Re-fit your model with Quality as categorical, and call this Model 3. 
+
+AIC Model 3 = -220.44 and  AIC Model 2 = -184.73. So, Model 2 has lower AIC, so it is better.
+```{r}
+Model_3 <- lm(log_price ~ log_sqft + Bathroom + Garage + YearBuild + as.character(Quality) + as.character(Quality) + Lot, data = housetrain)
+Model_3
+AIC(Model_3)
+```
+
+(e) State the coefficients of Model 3. Interpret each coefficient except the intercept in terms
+of percentage change in predicted house price.
+
+       
+log(Price) = -1.218 + 0.7372 * log_sqft + 0.03593 * Bathroom + 0.01769 * Garage + 0.004082 * YearBuild - 0.2909 * Quality2 - 0.3696 * Quality3 + 0.000004668 * Lot + error
+```{r}
+Model_3 <- lm(log(Price) ~ log(Sqft) + Bathroom + Garage + YearBuild + as.character(Quality) + Lot, data = housetrain)
+
+# or use factor
+#Model3 <- lm(log(Price) ~ log(Sqft) + Bathroom + Garage + YearBuild + factor(Quality) + Lot, data = housetrain)
+
+coef(Model_3)
+```
+
+```{r}
+exp(coef(Model_3)[3:8])
+```
+
+This tells us (again holding everything else constant in each case):
+
+    One additional bathroom increases predicted price by 3.7%.
+    One additional garage increases predicted price by 1.8%.
+    Being one year newer increases predicted price by 0.4%.
+    Being “medium” quality results in a predicted price 25% lower than for high quality.
+    Being “low” quality results in a predicted price 31% lower than for high quality.
+    An extra 1000 square feet of lot size increased predicted price by 0.47%.
+
+#######################################################################################################################
+
+2.  
+
+The variable result gives the actual margin in the game: a positive number meant the home team won, while a
+negative number meant the home team lost. 
+
+For this question, we will only care about whether the home team won or lost, not the margin.
+
+Data:
+```{r}
+NFL <- read.csv("NFL2021.csv", header = T)
+```
+
+
+(a) First, get rid of the tie. Then create a Boolean variable from the variable result.
+```{r}
+result <- NFL$result[NFL$result != 0] #get rid of the tie
+win <- result > 0 ## Create Boolean (a binary variable:TRUE and FALSE)
+```
+
+#######################################################################################################################
+
+(b) Using optim() (and not glm()), fit a logistic regression model to estimate the probability the home team wins as a function of the spread in points.
+```{r}
+logit.nll <- function(params, x, y){
+beta0 <- params[1]
+beta1 <- params[2]
+eta <- beta0 + beta1 * x
+trues <- which(y == TRUE)
+true.ll <- eta[trues] - log(1 + exp(eta[trues]))
+falses <- which(y == FALSE)
+false.ll <- -log(1 + exp(eta[falses]))
+loglik <- sum(true.ll) + sum(false.ll)
+return(-loglik)
+}
+
+optim <- optim(par = c(0, 0), fn = logit.nll, x = NFL$spread_line[NFL$result != 0], y = win)
+optim
+```
+
+
+(c) Plot these probabilities for spreads from −20 to +20. 
+
+Do your model’s results make sense?
+```{r}
+beta0 <- optim$par[1]
+beta1 <- optim$par[2]
+
+spread <- seq(-20, 20, 0.5)
+
+eta <- beta0 + beta1 * spread
+probs <- exp(eta) / (1 + exp(eta))
+plot(spread, probs, type = "l", ylim = c(0, 1))
+
+abline(h = 0.5, col = "red")
+```
+This makes decent sense to me: the more positive the point spread is (in favor of the home team), the more likely the home team is to win, while the more negative the point spread is, the less likely the home team is to win. The curve doesn’t quite have a probability of 0.5 when the spread is zero (it’s more like a 46.5% chance) but the sample size isn’t huge, so this could be noise.
+
+
+(d) Redo part (b) using glm().
+```{r}
+glm(win ~ NFL$spread_line[NFL$result != 0], family = binomial )
+```
+

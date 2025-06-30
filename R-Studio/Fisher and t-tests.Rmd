@@ -1,0 +1,259 @@
+---
+title: "Fisher and t-tests"
+author: "Angelina Legostaeva"
+date: "2025-02-28"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+1. hist
+2.qqnorm
+3. Fisher
+4. computational method to estimate the variance of the MLE for λ
+5. 95% Wald confidence interval for λ
+
+6. wald
+7. p-value
+
+8. the computational approach and optim()
+9. the estimated variance matrix for your MLEs
+
+10. t-stat
+11 t.test
+
+
+
+
+1. 
+Data:
+```{r}
+expo <- scan("expo.txt")
+hist(expo, breaks = seq(0, 20, 1), main = "Expo Histogram")
+qqnorm(expo)
+summary(expo)
+```
+###################################################################################
+
+(a) Use observed Fisher information to estimate the variance of 
+the MLE for the rate parameter λ in the Exponential distribution, ˆV (ˆλ).
+
+```{r}
+n <- length(expo)
+
+lambda_exp <- 1 / mean(expo)
+lambda_exp
+
+var_exp <- lambda_exp^2 / n
+var_exp
+
+fisher <- n / lambda_exp^2
+fisher
+```
+
+(b)  No, the formulas are different. 
+```{r}
+n <- length(expo)
+
+lambda_poi <- mean(expo)
+lambda_poi
+
+var_poi <- lambda_poi / n
+var_poi
+```
+###################################################################################
+
+(c) Use computational method to estimate the variance of the MLE for λ, ˆV (ˆλ).
+```{r}
+set.seed(352) 
+x <- rexp(n, rate = 0.5) 
+
+nll_exp <- function(lambda, data) {
+  n <- length(data)
+  return(- (n * log(lambda) - lambda * sum(data))) 
+}
+
+expo.mle <- optim(par = 1, fn = nll_exp, data = expo, method = "Brent", lower = 0.001, upper = 10, hessian = TRUE)
+expo.mle$par
+expo.mle$hessian
+```
+###################################################################################
+
+(d) Construct a 95% Wald confidence interval for λ. Interpret your confidence interval and
+make a conclusion about the true value of λ being 0.5.
+```{r}
+z <- 1.96
+
+expo.var <- solve(expo.mle$hessian)
+expo.var
+
+se <- sqrt(diag(expo.var))
+
+lower <- expo.mle$par - z * se
+upper <- expo.mle$par + z * se
+
+c(lower, upper)
+```
+###################################################################################
+
+(e)
+P-value is 0.00117656 < 0.5, so our p-value is small, while the sample size is big. 
+So, it would be unusual if the alternative hypothesis would be true. 
+There is evidence for the alternative hypothesis. Reject H0 : λ = 0.5.
+```{r}
+W <- (expo.mle$par - 0.5)^2 / (1 / expo.mle$hessian)
+W
+
+# P-value
+1 - pchisq(W, df = 1)
+```
+###################################################################################
+
+2. file womensheights.txt and Normal distribution
+
+```{r}
+height <- scan("womensheights.txt")
+summary(height)
+```
+
+(a) Using data and the computational approach and optim(),
+```{r}
+mu_ <- mean(height)
+sigma2_ <- var(height)
+
+h.nll <- function(params) {
+  mu <- params[1]
+  sigma2 <- params[2]
+  n <- length(height)
+  nll <- (n/2) * log(2 * pi * sigma2) + sum((height - mu)^2) / (2 * sigma2)
+  return(nll)
+}
+
+optim_mle <- optim(par = c(mu_, sigma2_), fn = h.nll, hessian = TRUE)
+
+mle_mu <- optim_mle$par[1] 
+mle_mu
+
+mle_sigma2 <- optim_mle$par[2]
+mle_sigma2
+```
+###################################################################################
+
+i. find the MLEs for μ and σ2;
+```{r}
+mu <- 162.05621  
+sigma2 <- 52.9174
+```
+ii. find and state the estimated variance matrix for your MLEs;
+```{r}
+matrix.var <- solve(optim_mle$hessian)
+matrix.var
+```
+
+iii. find a 99% Wald confidence interval for μ, the average height of American adult women;
+```{r}
+se_mu <- sqrt(matrix.var[1, 1])
+
+# 1 - ((1-0.99)/2) = 0.995
+mu_ci <- optim_mle$par[1] + c(-1, 1) * qnorm(0.995) * se_mu
+mu_ci
+```
+###################################################################################
+
+iv. find a 99% Wald confidence interval for σ2, the variance of American adult women.
+```{r}
+se_sigma2 <- sqrt(matrix.var[2, 2])
+
+sigma2_ci <- optim_mle$par[2] + c(-1, 1) * qnorm(0.995) * se_sigma2
+sigma2_ci
+```
+
+
+(b) How would you find a 99% confidence interval for σ, the standard deviation of heights
+of American adult women?
+```{r}
+#sigma = sqrt(sigma^2)
+sigma_ci <- sqrt(sigma2_ci)
+sigma_ci
+```
+###################################################################################
+
+(c) mu = 161.3 
+Wald test:
+P -value is 1.776946e-10 which is much smaller than 0.5, 
+so I reject the null hypothesis H0 that 
+the average height of American adult women is 161.3 cm. 
+```{r}
+w <- (optim_mle$par[1] - 161.3)^2 / matrix.var[1, 1]
+w
+
+1 - pchisq(w, df = 1)
+```
+
+###################################################################################
+
+```{r}
+t_stat <- (mle_mu - 161.3) / se_mu
+t_stat
+2 * (1 - pnorm(abs(t_stat)))
+```
+###################################################################################
+
+(d) Use t.test to perform a t test for the above hypothesis as well as produce a 99%
+confidence interval. Yes, the same conclusion, because the p-values is still really small.
+```{r}
+t <- t.test(height, mu = 161.3, conf.level = 0.99)
+t
+```
+
+
+(e) Using data and the theory approach,
+
+i. find the MLEs for μ and σ2;
+```{r}
+n <- length(height)
+      
+theory.mu <- mean(height)
+theory.sigma2 <- var(height) * (n - 1) / length(height)
+
+theory.mu
+theory.sigma2
+```
+
+ii. find a 99% confidence interval for μ, the average height of American adult women;
+```{r}
+n <- length(height)
+se.theory <- sqrt(theory.sigma2 / n)
+
+lower_mu <- theory.mu - qnorm(0.995) * se.theory
+upper_mu <- theory.mu + qnorm(0.995) * se.theory
+c(lower_mu, upper_mu)
+```
+
+iii. find a 99% confidence interval for σ2, the variance of heights of American adult
+women.
+
+```{r}
+n <- length(height)
+se.sd <-  sqrt(2 * theory.sigma2) / sqrt(n)
+
+lower_mu <- theory.sigma2 - qnorm(0.995) * se.sd
+upper_mu <- theory.sigma2 + qnorm(0.995) * se.sd
+c(lower_mu, upper_mu)
+```
+
+iv. mu = 5.3
+P-value is much smaller than 0.05 (but big data set); the observed value is different from 5.3, 
+So, we would reject the null hypothesis H0: mu = 5.3. Conclusion, I used the Wald test for 
+the mle estimate for the sigma or the standard deviation to approve (or disprove) 
+the hypothesis about the standard deviation of women’s heights is, but in Belgium  if it’s 5.3 cm.
+```{r}
+v <- 2 * 5.3^4 / 3766
+w <- (theory.sigma2 - 5.3^2)^2 / v
+1 - pchisq(w, df = 1)
+```
